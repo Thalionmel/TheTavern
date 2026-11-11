@@ -1,6 +1,6 @@
 # The Tavern
 
-A shared tabletop campaign hub for one game master and five players. The current version includes **accounts, campaign rooms, live 3D dice, character documents and a shared Map Room with server-enforced visibility**.
+A shared tabletop campaign hub for one game master and five players. The current version includes **accounts, campaign rooms, live 3D dice, character documents, a shared campaign diary and a Map Room with server-enforced visibility**.
 
 Cloudflare deployment: **[Open The Tavern](https://the-tavern.the-tavern.workers.dev)**. Create a room to become its GM, then share its invitation with the other five players. Each person chooses their own name and password.
 
@@ -46,6 +46,7 @@ Standalone Node configuration: copy `.env.example` to `.env`. `HOST`, `PORT`, `D
 - The server generates dice with `crypto.randomInt`; clients cannot supply results, author identity, room identity, or roles.
 - A draggable, resizable Hero Document window opens the existing RPG Projects Heldenbau editor and character vault. Attach a Heldenbau JSON export or PDF and choose its audience.
 - A live Map Room with GM uploads, manual fog reveal/conceal, player-owned tokens, zoom and a draggable/maximizable window.
+- A shared campaign diary with dated events, search, live updates and reversible archives in a draggable/maximizable window.
 - Other hub elements are clearly marked **Coming later** and are not implemented yet.
 
 Changing the visibility choice affects the **next** roll. A completed roll keeps its original audience.
@@ -73,6 +74,16 @@ Map changes are shared over the existing authenticated WebSocket/SSE connections
 **Concealment is applied on the server.** Players receive a separately encoded PNG containing only revealed pixels, with opaque fog replacing concealed pixels. Neither the original map nor its metadata/layers is sent to players. Hidden-map downloads are denied, image responses are authenticated and uncached, and stale image versions are rejected. Concealing something again cannot erase an image or position a player already saw or saved. The campaign/database operator still has access to stored originals.
 
 The browser accepts PNG/JPEG files up to 16 MiB and resizes them to at most 2,097,152 pixels and 4096 pixels per side. Direct API uploads are bounded to 8 MiB with the same pixel/dimension limits. SVG, GIF and PDF maps are not accepted. PNG decompression and JPEG memory are bounded, and images are re-encoded without source metadata. Storage uses the existing campaign SQLite database with chunked original and player images; no bucket is required. There is one active map and no map archive. Replacement requires explicit acknowledgment and resets fog and token positions. Limits per account/minute: three uploads, thirty fog/share actions and 120 token actions, including rejected attempts.
+
+## Shared Diary
+
+Open **Shared Diary**, then **New entry** to record a title, calendar date and plain-text event. An optional Aventurian date accepts labels such as `13. Praios 1047 BF`. Entries appear newest event first, with search across titles, text and Aventurian dates and 50 entries per page.
+
+Everyone in this campaign can read and add entries. Only an entry's original author or the campaign GM can edit, archive or restore it. Original authorship is retained and the latest editor is shown. **Archived entries remain readable by everyone in the campaign**; archiving is organization, not privacy. The separate Personal Notebook is not implemented yet.
+
+Changes arrive over the existing live connection. If another person edits your open draft, a notice offers to reload the saved entry; a stale save is rejected rather than overwriting their changes. Unsaved text stays in memory when closing/reopening this window or receiving live updates. **Save before reloading the page or signing out**, which clears drafts. There is no full revision history or permanent-delete action.
+
+Limits: 120 characters for a title, 6,000 for entry text, 80 for an Aventurian date, 5,000 entries per campaign including archives, and 30 write attempts per account per minute. Text stays in the existing campaign SQLite database; no extra service or storage binding is needed. Retrying the same new-entry request does not create duplicate entries.
 
 ## Storage and account boundaries
 

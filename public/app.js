@@ -1,3 +1,4 @@
+import { setupDiary } from './diary.js';
 import { setupMaps } from './maps.js';
 import { setupHeroes } from './heroes.js';
 const $ = id => document.getElementById(id);
@@ -17,6 +18,7 @@ let normalPosition = null;
 let diceTray = null;
 let trayModule;
 let trayGeneration = 0;
+const diary = setupDiary({ getAccount: () => current?.me, api, toast });
 const mapRoom = setupMaps({ getContext: () => current, api, toast });
 const heroes = setupHeroes({ getAccount: () => current?.me, api, toast });
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -98,7 +100,7 @@ async function api(path, body) {
   const result = await response.json();
   if (!response.ok) {
     if (response.status === 401 && current && current.me.id === requestingAccount) leaveWorkspace();
-    throw new Error(result.error || 'Something went wrong. Please try again.');
+    throw Object.assign(new Error(result.error || 'Something went wrong. Please try again.'), { status: response.status });
   }
   return result;
 }
@@ -186,11 +188,13 @@ function connect() {
     if (!current || current.me.id !== accountId) return;
     current = JSON.parse(event.data);
     mapRoom.changed();
+    diary.changed();
     setConnection(true);
     renderMembers();
     renderRolls();
     showLatestRoll(current.rolls.at(-1));
   });
+  events.addEventListener('diary', event => { if (current?.me.id === accountId) diary.changed(JSON.parse(event.data)); });
   events.addEventListener('map', event => { if (current?.me.id === accountId) mapRoom.changed(JSON.parse(event.data)); });
   events.addEventListener('roll', event => {
     if (!current || current.me.id !== accountId) return;
@@ -223,11 +227,13 @@ function receivePacket(accountId, type, data) {
     if (data.me.id !== accountId) return;
     current = data;
     mapRoom.changed();
+    diary.changed();
     setConnection(true);
     renderMembers();
     renderRolls();
     showLatestRoll(current.rolls.at(-1));
-  } else if (type === 'map') mapRoom.changed(data);
+  } else if (type === 'diary') diary.changed(data);
+  else if (type === 'map') mapRoom.changed(data);
   else if (type === 'roll') appendRoll(data, true);
   else if (type === 'presence') {
     current.members.forEach(member => { member.online = data.online.includes(member.id); });
@@ -302,6 +308,7 @@ function enterWorkspace(state) {
 }
 
 function leaveWorkspace() {
+  diary.reset();
   mapRoom.reset();
   heroes.reset();
   resetDiceTray();
@@ -441,7 +448,7 @@ function openDice() {
     }
   }
   win.hidden = false;
-  win.style.zIndex = '34'; $('hero-window').style.zIndex = '30'; $('map-window').style.zIndex = '30';
+  win.style.zIndex = '34'; $('hero-window').style.zIndex = '30'; $('map-window').style.zIndex = '30'; $('diary-window').style.zIndex = '30';
   $('restore-dice').hidden = false;
   $('window-state').textContent = 'Open';
   clampWindow();
@@ -488,9 +495,19 @@ $('dice-drag').addEventListener('pointermove', event => {
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('dice-drag').addEventListener(type, () => { if (drag) { drag = null; savePosition(); } });
 $('dice-window').addEventListener('pointerup', savePosition);
 window.addEventListener('resize', clampWindow);
-window.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('dice-window').hidden) closeDice(); });
 window.addEventListener('pagehide', () => { savePosition(); events?.close(); });
 window.addEventListener('pageshow', event => { if (event.persisted && current) connect(); });
+
+// Keep independent tools usable when their windows overlap.
+for (const win of document.querySelectorAll('.floating-window')) win.addEventListener('pointerdown', () => {
+  for (const other of document.querySelectorAll('.floating-window')) other.style.zIndex = other === win ? '35' : '30';
+});
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const top = [...document.querySelectorAll('.floating-window:not([hidden])')].sort((a, b) => Number(b.style.zIndex || 30) - Number(a.style.zIndex || 30))[0];
+  if (!top) return;
+  event.preventDefault(); event.stopImmediatePropagation(); top.querySelector('button[id^="close-"]')?.click();
+}, { capture: true });
 
 const invitation = new URLSearchParams(location.hash.slice(1)).get('join');
 if (invitation && /^[a-fA-F0-9]{16}$/.test(invitation)) { setMode('join'); $('room-code').value = invitation; }

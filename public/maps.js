@@ -174,7 +174,7 @@ export function setupMaps({ getContext, api, toast }) {
   function open() {
     if (!me()) return;
     active = true; $('map-window').hidden = false; $('restore-map').hidden = false;
-    $('map-window').style.zIndex = '33'; $('hero-window').style.zIndex = '30'; $('dice-window').style.zIndex = '30';
+    $('map-window').style.zIndex = '33'; $('hero-window').style.zIndex = '30'; $('dice-window').style.zIndex = '30'; $('diary-window').style.zIndex = '30';
     if (!map) $('map-upload-details').open = true;
     controls(); refresh(); $('map-refresh').focus({ preventScroll: true });
   }
@@ -192,7 +192,6 @@ export function setupMaps({ getContext, api, toast }) {
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('map-drag').addEventListener(type, () => { windowDrag = null; });
   window.addEventListener('resize', () => { if (innerWidth <= 680) { $('map-window').style.left = ''; $('map-window').style.top = ''; } });
-  window.addEventListener('keydown', event => { if (event.key === 'Escape' && active) close(); });
   return {
     changed({ image = true } = {}) {
       if (!active) return;

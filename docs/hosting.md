@@ -11,7 +11,7 @@ Cloudflare is the selected host. Checked against official documentation on **11 
 | Accounts and dice history | SQLite-backed Durable Object per campaign | Generates results, persists accounts/sessions/rolls and filters history by audience. |
 | Live results and presence | Hibernating WebSockets in the campaign object | Filters messages by stored session and audience; connections remain open while the object sleeps. |
 | Authentication rate limits | SQLite-backed Durable Object per IP | Keeps limits across runtime eviction without continuous timers. |
-| Maps and attachments | Future R2 or AWS S3 integration | No buckets, upload endpoints or storage credentials are configured. |
+| Character attachments, diary and active map | Campaign SQLite Durable Object | Bounded authenticated uploads, shared diary text, fog state and account-owned tokens; no buckets or storage credentials. |
 
 `wrangler.jsonc` binds `CampaignRoom` and `RequestGuard` and creates their SQLite namespaces in migration `v1`. SQLite-backed objects support the Free plan; do not replace this with a legacy KV-backed class migration.
 
@@ -71,7 +71,7 @@ GitHub Actions runs validation only. It does not deploy and has no Cloudflare cr
 
 ## Later storage and voice
 
-Structured character sheets, notes, NPC records and map reveal state can live with the campaign's database when those features are implemented. Larger map images and documents belong in object storage. R2 is a convenient first option and offers an S3-compatible API; AWS S3 remains possible if there is a concrete reason to use it.
+Current character attachments, diary entries and map state live in the campaign database. Future NPC records and private notes can use the same database. Larger map and document libraries belong in object storage. R2 offers an S3-compatible API; AWS S3 remains possible if there is a concrete reason to use it.
 
 R2 Standard currently includes 10 GB-month storage, 1 million Class A operations and 10 million Class B operations monthly, with no internet egress charge. Enabling R2 and any billing requirements should be a separate decision when uploads are implemented. AWS S3 has its own storage, request and transfer costs; no AWS account access is needed now. GM-only assets must use authorized retrieval, rather than public bucket URLs, to preserve future map secrecy.
 
@@ -92,3 +92,7 @@ RPG Projects remains an embedded external app with its own login and hero vault.
 One active map per campaign uses the same SQLite Durable Object. Originals and pre-masked player PNGs are chunked into 64 KiB rows; fog changes replace only the player image and advance its image revision. Token moves do not rewrite image bytes. The backend bounds uploads to 8 MiB and decoded images to 2,097,152 pixels / 4096 pixels per side; the browser accepts a larger 16 MiB source for local resizing. Each image is canonicalized, with metadata removed. At worst the two RGBA representations are roughly 16 MiB before PNG compression, plus row/index overhead. No additional Cloudflare binding, image service, R2/S3 bucket or plan is configured.
 
 Fog editing performs image processing in the campaign object, so this remains a small-group feature. Upload/fog/token rate limits are persisted across hibernation. Larger maps, an archive, rapid painting or many campaigns should move image bytes/processing to a dedicated storage and image path while retaining per-account server masking. Existing Cloudflare account quotas continue to apply.
+
+### Current shared diary
+
+Diary entries and persistent write limits use additive tables in the same campaign SQLite object. There are no new namespaces, bindings, buckets or dependencies. Up to 5,000 entries per campaign (including archives), 6,000 text characters per entry and 50 summaries per page bound storage and response sizes. Creating or editing publishes only an entry ID and revision on the live connection; authenticated clients retrieve current content separately. Archives retain their content and count toward the campaign limit. Existing Cloudflare storage, row-operation and request quotas still apply.

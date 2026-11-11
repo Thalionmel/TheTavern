@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { rollDice } from '../lib/dice.mjs';
 import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from '../lib/heroes.mjs';
 import { MAP_SCHEMA, mapStore, readMap } from '../lib/maps.mjs';
+import { DIARY_SCHEMA, DIARY_BODY_LIMIT, diaryStore } from '../lib/diary.mjs';
 
 const derive = promisify(scrypt);
 const DAY = 86_400_000;
@@ -26,7 +27,7 @@ function sessionCookie(request) {
   return match ? { roomCode: match[1], tokenHash: hash(match[2]) } : null;
 }
 
-async function readBody(request) {
+async function readBody(request, limit = 8192) {
   if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') throw fail(415, 'Send application/json.');
   if (!request.body) throw fail(400, 'Send a valid JSON object.');
   const reader = request.body.getReader();
@@ -36,7 +37,7 @@ async function readBody(request) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > 8192) { await reader.cancel(); throw fail(413, 'That request is too large.'); }
+    if (size > limit) { await reader.cancel(); throw fail(413, 'That request is too large.'); }
     chunks.push(value);
   }
   try {
@@ -103,7 +104,7 @@ export default {
         const session = sessionCookie(request);
         if (!session) throw fail(401, 'Please sign in to your room.');
         roomCode = session.roomCode;
-        if (request.method === 'POST' && !['/api/hero', '/api/map/upload'].includes(path)) body = await readBody(request);
+        if (request.method === 'POST' && !['/api/hero', '/api/map/upload'].includes(path)) body = await readBody(request, path === '/api/diary' || path.startsWith('/api/diary/') ? DIARY_BODY_LIMIT : 8192);
       }
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.delete('Content-Length');
@@ -150,11 +151,12 @@ export class CampaignRoom extends DurableObject {
         'CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id)',
         'CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires)',
         'CREATE TABLE IF NOT EXISTS roll_limits (account_id TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL)',
-        ...HERO_SCHEMA, ...MAP_SCHEMA,
+        ...HERO_SCHEMA, ...MAP_SCHEMA, ...DIARY_SCHEMA,
       ]) this.sql.exec(statement);
     });
     const database = { query: (sql, ...args) => this.sql.exec(sql, ...args).toArray(), run: (sql, ...args) => this.sql.exec(sql, ...args), transaction: fn => ctx.storage.transactionSync(fn) };
     this.heroes = heroStore(database);
+    this.diary = diaryStore(database);
     this.maps = mapStore({ ...database, memberFor: (account, id) => this.one('SELECT id FROM accounts WHERE id = ?', id) });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -265,6 +267,15 @@ export class CampaignRoom extends DurableObject {
 
       const account = this.authenticate(request);
       account.room_id = this.room().code;
+      if (path === '/api/diary' && request.method === 'GET') return json(200, this.diary.list(account, new URL(request.url)));
+      if (path.startsWith('/api/diary/') && request.method === 'GET') return json(200, { entry: this.diary.get(account, path.slice('/api/diary/'.length)) });
+      if ((path === '/api/diary' || path.startsWith('/api/diary/')) && request.method === 'POST') {
+        this.diary.limit(account);
+        const body = await readBody(request, DIARY_BODY_LIMIT);
+        const entry = path === '/api/diary' ? this.diary.create(account, body) : this.diary.update(account, path.slice('/api/diary/'.length), body);
+        this.broadcast('diary', { id: entry.id, revision: entry.revision });
+        return json(path === '/api/diary' ? 201 : 200, { entry });
+      }
       if (path === '/api/map' && request.method === 'GET') return json(200, this.maps.state(account));
       if (path === '/api/map/image' && request.method === 'GET') {
         const image = this.maps.image(account, new URL(request.url));

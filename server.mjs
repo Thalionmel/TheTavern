@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollDice } from './lib/dice.mjs';
 import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from './lib/heroes.mjs';
 import { MAP_SCHEMA, mapStore, readMap } from './lib/maps.mjs';
+import { DIARY_SCHEMA, DIARY_BODY_LIMIT, diaryStore } from './lib/diary.mjs';
 
 const derive = promisify(scrypt);
 const root = dirname(fileURLToPath(import.meta.url));
@@ -36,14 +37,16 @@ function accountFields(body) {
   return { username, usernameKey: username.toLowerCase(), password };
 }
 
-async function readJson(req) {
+async function readJson(req, limit = 8192) {
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') throw error(415, 'Send application/json.');
-  let text = '';
+  const chunks = []; let size = 0;
   for await (const chunk of req) {
-    text += chunk;
-    if (Buffer.byteLength(text) > 8192) throw error(413, 'That request is too large.');
+    size += chunk.byteLength;
+    if (size > limit) throw error(413, 'That request is too large.');
+    chunks.push(chunk);
   }
   try {
+    const text = Buffer.concat(chunks, size).toString('utf8');
     const body = JSON.parse(text);
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error();
     return body;
@@ -77,13 +80,14 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     CREATE INDEX IF NOT EXISTS rolls_room ON rolls(room_id, sequence DESC);
     CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);
   `);
-  for (const statement of [...HERO_SCHEMA, ...MAP_SCHEMA]) db.exec(statement);
+  for (const statement of [...HERO_SCHEMA, ...MAP_SCHEMA, ...DIARY_SCHEMA]) db.exec(statement);
   const database = {
     query: (sql, ...args) => db.prepare(sql).all(...args),
     run: (sql, ...args) => db.prepare(sql).run(...args),
     transaction: fn => { db.exec('BEGIN IMMEDIATE'); try { fn(); db.exec('COMMIT'); } catch (err) { db.exec('ROLLBACK'); throw err; } },
   };
   const heroes = heroStore(database);
+  const diary = diaryStore(database);
   const maps = mapStore({ ...database, memberFor: (account, id) => db.prepare('SELECT id FROM accounts WHERE id = ? AND room_id = ?').get(id, account.room_id) });
   db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
   const streams = new Set();
@@ -94,6 +98,7 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     ['/dice3d.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js'))]],
     ['/dice3d.js.LEGAL.txt', ['text/plain; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js.LEGAL.txt'))]],
     ['/pdf-preview.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/pdf-preview.js'))]],
+    ['/diary.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/diary.js'))]],
     ['/maps.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/maps.js'))]],
     ['/heroes.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/heroes.js'))]],
     ['/styles.css', ['text/css; charset=utf-8', readFileSync(resolve(root, 'public/styles.css'))]],
@@ -241,6 +246,15 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
       }
 
       const account = authenticate(req);
+      if (url.pathname === '/api/diary' && req.method === 'GET') { json(200, diary.list(account, url)); return; }
+      if (url.pathname.startsWith('/api/diary/') && req.method === 'GET') { json(200, { entry: diary.get(account, url.pathname.slice('/api/diary/'.length)) }); return; }
+      if ((url.pathname === '/api/diary' || url.pathname.startsWith('/api/diary/')) && req.method === 'POST') {
+        diary.limit(account);
+        const body = await readJson(req, DIARY_BODY_LIMIT);
+        const entry = url.pathname === '/api/diary' ? diary.create(account, body) : diary.update(account, url.pathname.slice('/api/diary/'.length), body);
+        for (const stream of streams) if (stream.account.room_id === account.room_id) send(stream, 'diary', { id: entry.id, revision: entry.revision });
+        json(url.pathname === '/api/diary' ? 201 : 200, { entry }); return;
+      }
       if (url.pathname === '/api/map' && req.method === 'GET') { json(200, maps.state(account)); return; }
       if (url.pathname === '/api/map/image' && req.method === 'GET') {
         const image = maps.image(account, url); res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); res.end(image); return;

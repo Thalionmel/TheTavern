@@ -69,7 +69,7 @@ export function setupHeroes({ getAccount, api, toast }) {
   function open() {
     if (!accountId()) return;
     $('hero-window').hidden = false; $('restore-hero').hidden = false;
-    $('hero-window').style.zIndex = '34'; $('dice-window').style.zIndex = '30'; $('map-window').style.zIndex = '30';
+    $('hero-window').style.zIndex = '34'; $('dice-window').style.zIndex = '30'; $('map-window').style.zIndex = '30'; $('diary-window').style.zIndex = '30';
     refresh(); $('hero-list').focus({ preventScroll: true });
   }
   function close() { generation++; release(); $('hero-window').hidden = true; $('restore-hero').hidden = true; $('open-hero').focus({ preventScroll: true }); }
@@ -114,7 +114,6 @@ export function setupHeroes({ getAccount, api, toast }) {
     $('hero-window').style.top = `${Math.max(8, Math.min(event.clientY - drag.y, innerHeight - 100))}px`;
   });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('hero-drag').addEventListener(type, () => { drag = null; });
-  window.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('hero-window').hidden) close(); });
   window.addEventListener('resize', () => { if (innerWidth <= 680) { $('hero-window').style.left = ''; $('hero-window').style.top = ''; } });
   return { reset() {
     generation++; sheets = []; selectedId = null; release();
