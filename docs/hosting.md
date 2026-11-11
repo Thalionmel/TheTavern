@@ -85,3 +85,10 @@ Keep Discord for voice/video initially. The app currently has neither embedded D
 Character attachments use the existing campaign SQLite Durable Object: one file per account, at most 10 MiB PDF or 2 MiB Heldenbau JSON. Binary data is split into 64 KiB rows; replacement updates metadata and chunks in one transaction. Six maximum-size PDFs represent at most 60 MiB of current attachment bytes per full campaign, plus database/index overhead. Upload attempts are limited to five per minute per account. Existing account-wide Cloudflare quotas still apply; this is a small-group starting point rather than an unbounded document library.
 
 RPG Projects remains an embedded external app with its own login and hero vault. There is no cross-origin credential bridge or automatic vault synchronization. The Tavern attaches explicit exported JSON/PDF snapshots. All PDF rendering assets and workers are self-hosted. Adding map libraries, attachment history or larger files should use R2/S3 and revisit storage and transfer limits.
+
+
+### Current Map Room
+
+One active map per campaign uses the same SQLite Durable Object. Originals and pre-masked player PNGs are chunked into 64 KiB rows; fog changes replace only the player image and advance its image revision. Token moves do not rewrite image bytes. The backend bounds uploads to 8 MiB and decoded images to 2,097,152 pixels / 4096 pixels per side; the browser accepts a larger 16 MiB source for local resizing. Each image is canonicalized, with metadata removed. At worst the two RGBA representations are roughly 16 MiB before PNG compression, plus row/index overhead. No additional Cloudflare binding, image service, R2/S3 bucket or plan is configured.
+
+Fog editing performs image processing in the campaign object, so this remains a small-group feature. Upload/fog/token rate limits are persisted across hibernation. Larger maps, an archive, rapid painting or many campaigns should move image bytes/processing to a dedicated storage and image path while retaining per-account server masking. Existing Cloudflare account quotas continue to apply.

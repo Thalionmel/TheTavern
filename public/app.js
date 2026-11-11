@@ -1,3 +1,4 @@
+import { setupMaps } from './maps.js';
 import { setupHeroes } from './heroes.js';
 const $ = id => document.getElementById(id);
 const labels = { public: 'Public', private: 'Only me', gm: 'To GM' };
@@ -16,6 +17,7 @@ let normalPosition = null;
 let diceTray = null;
 let trayModule;
 let trayGeneration = 0;
+const mapRoom = setupMaps({ getContext: () => current, api, toast });
 const heroes = setupHeroes({ getAccount: () => current?.me, api, toast });
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 try { $('enable-3d').checked = localStorage.getItem('tavern:3d-dice') !== 'off'; } catch { /* default enabled */ }
@@ -183,11 +185,13 @@ function connect() {
   events.addEventListener('snapshot', event => {
     if (!current || current.me.id !== accountId) return;
     current = JSON.parse(event.data);
+    mapRoom.changed();
     setConnection(true);
     renderMembers();
     renderRolls();
     showLatestRoll(current.rolls.at(-1));
   });
+  events.addEventListener('map', event => { if (current?.me.id === accountId) mapRoom.changed(JSON.parse(event.data)); });
   events.addEventListener('roll', event => {
     if (!current || current.me.id !== accountId) return;
     appendRoll(JSON.parse(event.data), true);
@@ -202,6 +206,7 @@ function connect() {
     if (!current || current.me.id !== accountId) return;
     current.members = JSON.parse(event.data).members;
     renderMembers();
+    mapRoom.changed({ image: false });
   });
   events.addEventListener('expired', () => { if (current?.me.id === accountId) { leaveWorkspace(); toast('Your session has ended. Please sign in again.'); } });
   events.onerror = async () => {
@@ -217,17 +222,20 @@ function receivePacket(accountId, type, data) {
   if (type === 'snapshot') {
     if (data.me.id !== accountId) return;
     current = data;
+    mapRoom.changed();
     setConnection(true);
     renderMembers();
     renderRolls();
     showLatestRoll(current.rolls.at(-1));
-  } else if (type === 'roll') appendRoll(data, true);
+  } else if (type === 'map') mapRoom.changed(data);
+  else if (type === 'roll') appendRoll(data, true);
   else if (type === 'presence') {
     current.members.forEach(member => { member.online = data.online.includes(member.id); });
     renderMembers();
   } else if (type === 'members') {
     current.members = data.members;
     renderMembers();
+    mapRoom.changed({ image: false });
   } else if (type === 'expired') {
     leaveWorkspace();
     toast('Your session has ended. Please sign in again.');
@@ -294,6 +302,7 @@ function enterWorkspace(state) {
 }
 
 function leaveWorkspace() {
+  mapRoom.reset();
   heroes.reset();
   resetDiceTray();
   events?.close();
@@ -432,7 +441,7 @@ function openDice() {
     }
   }
   win.hidden = false;
-  win.style.zIndex = '31'; $('hero-window').style.zIndex = '30';
+  win.style.zIndex = '34'; $('hero-window').style.zIndex = '30'; $('map-window').style.zIndex = '30';
   $('restore-dice').hidden = false;
   $('window-state').textContent = 'Open';
   clampWindow();

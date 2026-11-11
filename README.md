@@ -1,6 +1,6 @@
 # The Tavern
 
-A shared tabletop campaign hub for one game master and five players. The current version includes **accounts, campaign rooms, live 3D dice and character documents with server-enforced visibility**.
+A shared tabletop campaign hub for one game master and five players. The current version includes **accounts, campaign rooms, live 3D dice, character documents and a shared Map Room with server-enforced visibility**.
 
 Cloudflare deployment: **[Open The Tavern](https://the-tavern.the-tavern.workers.dev)**. Create a room to become its GM, then share its invitation with the other five players. Each person chooses their own name and password.
 
@@ -45,6 +45,7 @@ Standalone Node configuration: copy `.env.example` to `.env`. `HOST`, `PORT`, `D
 - The latest 100 authorized rolls are loaded on entry/reconnect. The database retains older rolls; there is no archive UI yet.
 - The server generates dice with `crypto.randomInt`; clients cannot supply results, author identity, room identity, or roles.
 - A draggable, resizable Hero Document window opens the existing RPG Projects Heldenbau editor and character vault. Attach a Heldenbau JSON export or PDF and choose its audience.
+- A live Map Room with GM uploads, manual fog reveal/conceal, player-owned tokens, zoom and a draggable/maximizable window.
 - Other hub elements are clearly marked **Coming later** and are not implemented yet.
 
 Changing the visibility choice affects the **next** roll. A completed roll keeps its original audience.
@@ -61,9 +62,21 @@ Each account has **one current attachment**, up to **10 MiB for PDF** or **2 MiB
 
 Files are validated and stored in 64 KiB SQLite chunks in the existing campaign database, with atomic replacement. They are never public static files. Uploads are limited to five attempts per account per minute, including invalid files. No R2, AWS bucket, paid plan or third-party upload service is needed for this small group. For larger libraries, migrate file bytes to R2 or S3 while retaining these authorization checks.
 
+## Map Room
+
+Open **Map Room** from the hub. The GM prepares one PNG/JPEG map, drags **Reveal area** rectangles to uncover terrain, and selects **Show to players** when ready. **Conceal area**, **Reveal all**, **Conceal all** and **Hide from players** are available. New and replacement maps start fully concealed and unshared. Fog uses a 32 × 32 editing grid; this is manual fog, without automatic line of sight.
+
+Each campaign member has one account-owned token displaying their initials. Choose **Place token**, then click the map; choose **Move tokens** to drag an existing token. Focus your token and use arrow keys for small moves. Players can place/move only their own token in revealed terrain; the GM can position any campaign member, including in concealed terrain. Tokens whose centers are concealed are omitted from player state. They become visible when that terrain is revealed.
+
+Map changes are shared over the existing authenticated WebSocket/SSE connections. Reconnecting reloads current map permissions, fog and positions. Concurrent edits use map IDs and revisions; a stale action is rejected and the client refreshes rather than overwriting a newer state. Zoom includes Fit map, Fit width and magnification with scrolling. The GM sees concealed terrain dimmed and concealed tokens with dashed borders.
+
+**Concealment is applied on the server.** Players receive a separately encoded PNG containing only revealed pixels, with opaque fog replacing concealed pixels. Neither the original map nor its metadata/layers is sent to players. Hidden-map downloads are denied, image responses are authenticated and uncached, and stale image versions are rejected. Concealing something again cannot erase an image or position a player already saw or saved. The campaign/database operator still has access to stored originals.
+
+The browser accepts PNG/JPEG files up to 16 MiB and resizes them to at most 2,097,152 pixels and 4096 pixels per side. Direct API uploads are bounded to 8 MiB with the same pixel/dimension limits. SVG, GIF and PDF maps are not accepted. PNG decompression and JPEG memory are bounded, and images are re-encoded without source metadata. Storage uses the existing campaign SQLite database with chunked original and player images; no bucket is required. There is one active map and no map archive. Replacement requires explicit acknowledgment and resets fog and token positions. Limits per account/minute: three uploads, thirty fog/share actions and 120 token actions, including rejected attempts.
+
 ## Storage and account boundaries
 
-SQLite stores rooms, salted scrypt password hashes, hashed session tokens, rolls and character attachments. The standalone Node server uses `data/tavern.sqlite`. Cloudflare uses one SQLite-backed Durable Object per campaign, with a separate Durable Object for each IP's authentication rate limit. Session cookies are HttpOnly and SameSite=Strict and expire after seven days; HTTPS adds Secure. Signing out revokes the session and ends its open event connections. Accounts and history survive a runtime restart.
+SQLite stores rooms, salted scrypt password hashes, hashed session tokens, rolls, character attachments and map state/images. The standalone Node server uses `data/tavern.sqlite`. Cloudflare uses one SQLite-backed Durable Object per campaign, with a separate Durable Object for each IP's authentication rate limit. Session cookies are HttpOnly and SameSite=Strict and expire after seven days; HTTPS adds Secure. Signing out revokes the session and ends its open event connections. Accounts and history survive a runtime restart.
 
 On Cloudflare, authenticated WebSockets deliver personalized updates. Connections can hibernate between events. Browser keepalive pings use Cloudflare's automatic response API, so they do not wake the campaign object; no server-side heartbeat interval runs. An alarm handles session expiry, and every broadcast checks the current stored session before sending a result.
 
@@ -83,7 +96,7 @@ Run `npm ci` once. Build scripts generate ignored 3D/PDF client bundles and PDF.
 npm test
 ```
 
-Run `npm ci` first. Tests first bundle the Cloudflare Worker using a deployment dry run, then exercise both backends. They use independent account cookies, real HTTP/SSE connections for Node, and the local Cloudflare runtime with WebSockets. They cover public delivery, private and GM-only exclusions, reconnect/history, room isolation, forged identities/roles, six-seat limits, authentication, origin validation, dice bounds, logout and persistence across restart. Cloudflare tests also force hibernation, check rate limits, and verify session expiry. Attachment tests check binary upload/download, all three audiences including GM exclusion, cross-campaign access, forged ownership, atomic replacement IDs, hibernation, upload limits and session revocation. They create isolated temporary data and do not touch your campaign database.
+Run `npm ci` first. Tests first bundle the Cloudflare Worker using a deployment dry run, then exercise both backends. They use independent account cookies, real HTTP/SSE connections for Node, and the local Cloudflare runtime with WebSockets. They cover public delivery, private and GM-only exclusions, reconnect/history, room isolation, forged identities/roles, six-seat limits, authentication, origin validation, dice bounds, logout and persistence across restart. Cloudflare tests also force hibernation, check rate limits, and verify session expiry. Attachment tests check binary upload/download, all three audiences including GM exclusion, cross-campaign access, forged ownership, atomic replacement IDs, hibernation, upload limits and session revocation. Map tests compare the actual decoded player pixels against the source and opaque fog, exercise token ownership/hidden tokens, map sharing, stale revisions, cross-campaign reads, live notifications and forced hibernation. They create isolated temporary data and do not touch your campaign database.
 
 ## Hosting
 

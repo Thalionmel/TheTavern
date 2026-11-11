@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from 'no
 import { promisify } from 'node:util';
 import { rollDice } from '../lib/dice.mjs';
 import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from '../lib/heroes.mjs';
+import { MAP_SCHEMA, mapStore, readMap } from '../lib/maps.mjs';
 
 const derive = promisify(scrypt);
 const DAY = 86_400_000;
@@ -102,12 +103,12 @@ export default {
         const session = sessionCookie(request);
         if (!session) throw fail(401, 'Please sign in to your room.');
         roomCode = session.roomCode;
-        if (request.method === 'POST' && path !== '/api/hero') body = await readBody(request);
+        if (request.method === 'POST' && !['/api/hero', '/api/map/upload'].includes(path)) body = await readBody(request);
       }
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.delete('Content-Length');
       forwardHeaders.set('X-Tavern-Room', roomCode);
-      const forwarded = new Request(request.url, { method: request.method, headers: forwardHeaders, body: path === '/api/hero' && request.method === 'POST' ? request.body : body === undefined ? undefined : JSON.stringify(body) });
+      const forwarded = new Request(request.url, { method: request.method, headers: forwardHeaders, body: ['/api/hero', '/api/map/upload'].includes(path) && request.method === 'POST' ? request.body : body === undefined ? undefined : JSON.stringify(body) });
       return await env.CAMPAIGNS.get(env.CAMPAIGNS.idFromName(roomCode)).fetch(forwarded);
     } catch (error) { return errorResponse(error); }
   },
@@ -149,10 +150,12 @@ export class CampaignRoom extends DurableObject {
         'CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id)',
         'CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires)',
         'CREATE TABLE IF NOT EXISTS roll_limits (account_id TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL)',
-        ...HERO_SCHEMA,
+        ...HERO_SCHEMA, ...MAP_SCHEMA,
       ]) this.sql.exec(statement);
     });
-    this.heroes = heroStore({ query: (sql, ...args) => this.sql.exec(sql, ...args).toArray(), run: (sql, ...args) => this.sql.exec(sql, ...args), transaction: fn => ctx.storage.transactionSync(fn) });
+    const database = { query: (sql, ...args) => this.sql.exec(sql, ...args).toArray(), run: (sql, ...args) => this.sql.exec(sql, ...args), transaction: fn => ctx.storage.transactionSync(fn) };
+    this.heroes = heroStore(database);
+    this.maps = mapStore({ ...database, memberFor: (account, id) => this.one('SELECT id FROM accounts WHERE id = ?', id) });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
 
@@ -262,6 +265,21 @@ export class CampaignRoom extends DurableObject {
 
       const account = this.authenticate(request);
       account.room_id = this.room().code;
+      if (path === '/api/map' && request.method === 'GET') return json(200, this.maps.state(account));
+      if (path === '/api/map/image' && request.method === 'GET') {
+        const image = this.maps.image(account, new URL(request.url));
+        return new Response(image, { headers: { ...headers, 'Content-Type': 'image/png' } });
+      }
+      if (path === '/api/map/upload' && request.method === 'POST') {
+        this.maps.requireGM(account); this.maps.limit(account, 'upload');
+        const image = await readMap(request.body, request.headers.get('Content-Type'), request.headers.get('Content-Length'));
+        this.authenticate(request);
+        const result = this.maps.upload(account, new URL(request.url), image); this.broadcast('map', {}); return json(201, result);
+      }
+      if (path === '/api/map/action' && request.method === 'POST') {
+        const body = await readBody(request); this.maps.limit(account, body.action === 'token' ? 'token' : 'fog');
+        const result = this.maps.update(account, body); this.broadcast('map', { image: body.action !== 'token' }); return json(200, result);
+      }
       if (path === '/api/heroes' && request.method === 'GET') return json(200, { sheets: this.heroes.list(account) });
       if (path === '/api/hero' && request.method === 'POST') {
         this.heroes.begin(account);

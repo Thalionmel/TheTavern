@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollDice } from './lib/dice.mjs';
 import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from './lib/heroes.mjs';
+import { MAP_SCHEMA, mapStore, readMap } from './lib/maps.mjs';
 
 const derive = promisify(scrypt);
 const root = dirname(fileURLToPath(import.meta.url));
@@ -76,12 +77,14 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     CREATE INDEX IF NOT EXISTS rolls_room ON rolls(room_id, sequence DESC);
     CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);
   `);
-  for (const statement of HERO_SCHEMA) db.exec(statement);
-  const heroes = heroStore({
+  for (const statement of [...HERO_SCHEMA, ...MAP_SCHEMA]) db.exec(statement);
+  const database = {
     query: (sql, ...args) => db.prepare(sql).all(...args),
     run: (sql, ...args) => db.prepare(sql).run(...args),
     transaction: fn => { db.exec('BEGIN IMMEDIATE'); try { fn(); db.exec('COMMIT'); } catch (err) { db.exec('ROLLBACK'); throw err; } },
-  });
+  };
+  const heroes = heroStore(database);
+  const maps = mapStore({ ...database, memberFor: (account, id) => db.prepare('SELECT id FROM accounts WHERE id = ? AND room_id = ?').get(id, account.room_id) });
   db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
   const streams = new Set();
   const attempts = new Map();
@@ -91,6 +94,7 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     ['/dice3d.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js'))]],
     ['/dice3d.js.LEGAL.txt', ['text/plain; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js.LEGAL.txt'))]],
     ['/pdf-preview.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/pdf-preview.js'))]],
+    ['/maps.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/maps.js'))]],
     ['/heroes.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/heroes.js'))]],
     ['/styles.css', ['text/css; charset=utf-8', readFileSync(resolve(root, 'public/styles.css'))]],
     ['/favicon.svg', ['image/svg+xml', readFileSync(resolve(root, 'public/favicon.svg'))]],
@@ -168,6 +172,8 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     for (const stream of streams) if (stream.account.room_id === roomId) send(stream, 'presence', { online });
   }
 
+  function mapChanged(roomId, image = true) { for (const stream of streams) if (stream.account.room_id === roomId) send(stream, 'map', { image }); }
+
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -235,6 +241,20 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
       }
 
       const account = authenticate(req);
+      if (url.pathname === '/api/map' && req.method === 'GET') { json(200, maps.state(account)); return; }
+      if (url.pathname === '/api/map/image' && req.method === 'GET') {
+        const image = maps.image(account, url); res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); res.end(image); return;
+      }
+      if (url.pathname === '/api/map/upload' && req.method === 'POST') {
+        maps.requireGM(account); maps.limit(account, 'upload');
+        const image = await readMap(req, req.headers['content-type'], req.headers['content-length']);
+        authenticate(req);
+        const result = maps.upload(account, url, image); mapChanged(account.room_id); json(201, result); return;
+      }
+      if (url.pathname === '/api/map/action' && req.method === 'POST') {
+        const body = await readJson(req); maps.limit(account, body.action === 'token' ? 'token' : 'fog');
+        const result = maps.update(account, body); mapChanged(account.room_id, body.action !== 'token'); json(200, result); return;
+      }
       if (url.pathname === '/api/heroes' && req.method === 'GET') { json(200, { sheets: heroes.list(account) }); return; }
       if (url.pathname === '/api/hero' && req.method === 'POST') {
         heroes.begin(account);

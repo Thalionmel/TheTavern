@@ -23,5 +23,9 @@
     "pdfjs-dist": "6.5.438",
     "three": "0.187.0",
     "wrangler": "4.160.1"
+  },
+  "dependencies": {
+    "fast-png": "8.0.0",
+    "jpeg-js": "0.4.4"
   }
 }

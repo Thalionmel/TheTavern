@@ -69,7 +69,7 @@ export function setupHeroes({ getAccount, api, toast }) {
   function open() {
     if (!accountId()) return;
     $('hero-window').hidden = false; $('restore-hero').hidden = false;
-    $('hero-window').style.zIndex = '31'; $('dice-window').style.zIndex = '30';
+    $('hero-window').style.zIndex = '34'; $('dice-window').style.zIndex = '30'; $('map-window').style.zIndex = '30';
     refresh(); $('hero-list').focus({ preventScroll: true });
   }
   function close() { generation++; release(); $('hero-window').hidden = true; $('restore-hero').hidden = true; $('open-hero').focus({ preventScroll: true }); }
