@@ -2,10 +2,11 @@ import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollDice } from './lib/dice.mjs';
+import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from './lib/heroes.mjs';
 
 const derive = promisify(scrypt);
 const root = dirname(fileURLToPath(import.meta.url));
@@ -75,15 +76,33 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     CREATE INDEX IF NOT EXISTS rolls_room ON rolls(room_id, sequence DESC);
     CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id);
   `);
+  for (const statement of HERO_SCHEMA) db.exec(statement);
+  const heroes = heroStore({
+    query: (sql, ...args) => db.prepare(sql).all(...args),
+    run: (sql, ...args) => db.prepare(sql).run(...args),
+    transaction: fn => { db.exec('BEGIN IMMEDIATE'); try { fn(); db.exec('COMMIT'); } catch (err) { db.exec('ROLLBACK'); throw err; } },
+  });
   db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
   const streams = new Set();
   const attempts = new Map();
   const files = new Map([
     ['/', ['text/html; charset=utf-8', readFileSync(resolve(root, 'public/index.html'))]],
     ['/app.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/app.js'))]],
+    ['/dice3d.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js'))]],
+    ['/dice3d.js.LEGAL.txt', ['text/plain; charset=utf-8', readFileSync(resolve(root, 'public/dice3d.js.LEGAL.txt'))]],
+    ['/pdf-preview.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/pdf-preview.js'))]],
+    ['/heroes.js', ['text/javascript; charset=utf-8', readFileSync(resolve(root, 'public/heroes.js'))]],
     ['/styles.css', ['text/css; charset=utf-8', readFileSync(resolve(root, 'public/styles.css'))]],
     ['/favicon.svg', ['image/svg+xml', readFileSync(resolve(root, 'public/favicon.svg'))]],
   ]);
+
+  // Only generated PDF support files are added, never arbitrary filesystem paths.
+  for (const entry of readdirSync(resolve(root, 'public/pdfjs'), { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const path = resolve(entry.parentPath, entry.name);
+    const relative = path.slice(resolve(root, 'public').length).replaceAll('\\', '/');
+    files.set(relative, [entry.name.endsWith('.mjs') ? 'text/javascript; charset=utf-8' : 'application/octet-stream', readFileSync(path)]);
+  }
 
   function rateLimit(req, bucket, limit, windowMs) {
     const key = `${bucket}:${req.socket.remoteAddress}`;
@@ -153,7 +172,7 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; font-src 'self' blob:; frame-src 'self' blob: https://rpg-projects.vercel.app; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if (appOrigin.startsWith('https://')) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     const json = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
     try {
@@ -216,6 +235,17 @@ export function createTavern({ databasePath = resolve(root, 'data/tavern.sqlite'
       }
 
       const account = authenticate(req);
+      if (url.pathname === '/api/heroes' && req.method === 'GET') { json(200, { sheets: heroes.list(account) }); return; }
+      if (url.pathname === '/api/hero' && req.method === 'POST') {
+        heroes.begin(account);
+        const file = await readHero(req, req.headers['content-type'], req.headers['content-length']);
+        authenticate(req);
+        json(201, { sheet: heroes.save(account, url, file) }); return;
+      }
+      if (url.pathname.startsWith('/api/heroes/') && req.method === 'GET') {
+        const sheet = heroes.get(account, url.pathname.slice('/api/heroes/'.length));
+        res.writeHead(200, heroHeaders(sheet)); res.end(sheet.bytes); return;
+      }
       if (req.method === 'GET' && url.pathname === '/api/state') { json(200, state(account)); return; }
       if (req.method === 'GET' && url.pathname === '/api/rolls') { json(200, { rolls: visibleHistory(account) }); return; }
       if (req.method === 'POST' && url.pathname === '/api/logout') {

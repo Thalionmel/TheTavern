@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { rollDice } from '../lib/dice.mjs';
+import { HERO_SCHEMA, heroStore, readHero, heroHeaders } from '../lib/heroes.mjs';
 
 const derive = promisify(scrypt);
 const DAY = 86_400_000;
@@ -101,12 +102,12 @@ export default {
         const session = sessionCookie(request);
         if (!session) throw fail(401, 'Please sign in to your room.');
         roomCode = session.roomCode;
-        if (request.method === 'POST') body = await readBody(request);
+        if (request.method === 'POST' && path !== '/api/hero') body = await readBody(request);
       }
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.delete('Content-Length');
       forwardHeaders.set('X-Tavern-Room', roomCode);
-      const forwarded = new Request(request.url, { method: request.method, headers: forwardHeaders, body: body === undefined ? undefined : JSON.stringify(body) });
+      const forwarded = new Request(request.url, { method: request.method, headers: forwardHeaders, body: path === '/api/hero' && request.method === 'POST' ? request.body : body === undefined ? undefined : JSON.stringify(body) });
       return await env.CAMPAIGNS.get(env.CAMPAIGNS.idFromName(roomCode)).fetch(forwarded);
     } catch (error) { return errorResponse(error); }
   },
@@ -148,8 +149,10 @@ export class CampaignRoom extends DurableObject {
         'CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account_id)',
         'CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires)',
         'CREATE TABLE IF NOT EXISTS roll_limits (account_id TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL)',
+        ...HERO_SCHEMA,
       ]) this.sql.exec(statement);
     });
+    this.heroes = heroStore({ query: (sql, ...args) => this.sql.exec(sql, ...args).toArray(), run: (sql, ...args) => this.sql.exec(sql, ...args), transaction: fn => ctx.storage.transactionSync(fn) });
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
 
@@ -258,6 +261,18 @@ export class CampaignRoom extends DurableObject {
       }
 
       const account = this.authenticate(request);
+      account.room_id = this.room().code;
+      if (path === '/api/heroes' && request.method === 'GET') return json(200, { sheets: this.heroes.list(account) });
+      if (path === '/api/hero' && request.method === 'POST') {
+        this.heroes.begin(account);
+        const file = await readHero(request.body, request.headers.get('Content-Type'), request.headers.get('Content-Length'));
+        this.authenticate(request);
+        return json(201, { sheet: this.heroes.save(account, new URL(request.url), file) });
+      }
+      if (path.startsWith('/api/heroes/') && request.method === 'GET') {
+        const sheet = this.heroes.get(account, path.slice('/api/heroes/'.length));
+        return new Response(sheet.bytes, { headers: { ...headers, ...heroHeaders(sheet) } });
+      }
       if (path === '/api/state' && request.method === 'GET') return json(200, this.state(account));
       if (path === '/api/rolls' && request.method === 'GET') return json(200, { rolls: this.history(account) });
       if (path === '/api/logout' && request.method === 'POST') {

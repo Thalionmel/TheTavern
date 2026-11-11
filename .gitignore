@@ -7,3 +7,8 @@ outputs/
 .wrangler/
 .dev.vars
 .dev.vars.*
+public/dice3d.js
+public/dice3d.js.LEGAL.txt
+public/pdf-preview.js
+public/pdf-preview.js.LEGAL.txt
+public/pdfjs/

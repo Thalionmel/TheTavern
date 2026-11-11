@@ -78,3 +78,10 @@ R2 Standard currently includes 10 GB-month storage, 1 million Class A operations
 Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
 
 Keep Discord for voice/video initially. The app currently has neither embedded Discord calls nor its own voice/video service. Railway remains a fallback for the standalone Node backend if the project later needs an always-running process; that option needs a persistent volume and a separate hosting budget.
+
+
+### Current character storage
+
+Character attachments use the existing campaign SQLite Durable Object: one file per account, at most 10 MiB PDF or 2 MiB Heldenbau JSON. Binary data is split into 64 KiB rows; replacement updates metadata and chunks in one transaction. Six maximum-size PDFs represent at most 60 MiB of current attachment bytes per full campaign, plus database/index overhead. Upload attempts are limited to five per minute per account. Existing account-wide Cloudflare quotas still apply; this is a small-group starting point rather than an unbounded document library.
+
+RPG Projects remains an embedded external app with its own login and hero vault. There is no cross-origin credential bridge or automatic vault synchronization. The Tavern attaches explicit exported JSON/PDF snapshots. All PDF rendering assets and workers are self-hosted. Adding map libraries, attachment history or larger files should use R2/S3 and revisit storage and transfer limits.

@@ -8,15 +8,20 @@
     "node": ">=22.14.0"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.mjs",
-    "dev": "node --env-file-if-exists=.env --watch server.mjs",
-    "dev:cloudflare": "wrangler dev --ip 127.0.0.1 --port 8787",
-    "build:cloudflare": "wrangler deploy --dry-run --outdir work/cloudflare-build",
-    "deploy:cloudflare": "wrangler deploy",
+    "start": "npm run build:client && node --env-file-if-exists=.env server.mjs",
+    "dev": "npm run build:client && node --env-file-if-exists=.env --watch server.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "dev:cloudflare": "npm run build:client && wrangler dev --ip 127.0.0.1 --port 8787",
+    "build:cloudflare": "npm run build:client && wrangler deploy --dry-run --outdir work/cloudflare-build",
+    "deploy:cloudflare": "npm run build:client && wrangler deploy",
     "test": "npm run build:cloudflare && node --test"
   },
   "devDependencies": {
+    "cannon-es": "0.20.0",
+    "esbuild": "0.28.2",
     "miniflare": "5.20261110.1-beta",
+    "pdfjs-dist": "6.5.438",
+    "three": "0.187.0",
     "wrangler": "4.160.1"
   }
 }

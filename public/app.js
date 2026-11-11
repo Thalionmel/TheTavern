@@ -1,3 +1,4 @@
+import { setupHeroes } from './heroes.js';
 const $ = id => document.getElementById(id);
 const labels = { public: 'Public', private: 'Only me', gm: 'To GM' };
 const visibilityHelp = {
@@ -12,6 +13,70 @@ let toastTimer;
 let drag = null;
 let maximized = false;
 let normalPosition = null;
+let diceTray = null;
+let trayModule;
+let trayGeneration = 0;
+const heroes = setupHeroes({ getAccount: () => current?.me, api, toast });
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+try { $('enable-3d').checked = localStorage.getItem('tavern:3d-dice') !== 'off'; } catch { /* default enabled */ }
+
+function stopDiceAnimation() { trayGeneration++; diceTray?.stop(); }
+function resetDiceTray() { stopDiceAnimation(); diceTray?.dispose(); diceTray = null; }
+async function updateDiceStage(roll, animate = false) {
+  const generation = ++trayGeneration, accountId = current?.me.id;
+  if (!current || $('dice-window').hidden) return;
+  const enabled = $('enable-3d').checked;
+  const sides = Number(roll?.expression.match(/d(\d+)/)?.[1]);
+  const supported = [4, 6, 8, 10, 12, 20].includes(sides);
+  $('replay-roll').disabled = true;
+  $('dice-stage').dataset.mode = enabled && (!roll || supported) ? '3d' : 'fallback';
+  if (!enabled || !roll || !supported) {
+    diceTray?.reset();
+    $('tray-placeholder').hidden = false;
+    $('tray-placeholder').querySelector('span').textContent = !enabled ? 'Your result, without the tumble.' : !roll ? 'Your next roll lands here.' : 'Every result still counts.';
+    $('tray-status').textContent = !enabled ? '3D off · numbers remain below.' : !roll ? 'A little momentum. A little luck.' : `d${sides} uses the numeric result below.`;
+    return;
+  }
+  const shouldAnimate = animate && !reducedMotion.matches && !document.hidden;
+  $('tray-status').textContent = shouldAnimate ? 'Rolling on the table…' : 'Placing the dice…';
+  try {
+    const { DiceTray } = await (trayModule ??= import('/dice3d.js'));
+    if (generation !== trayGeneration || current?.me.id !== accountId || $('dice-window').hidden) return;
+    if (!diceTray) diceTray = new DiceTray($('dice-canvas'), () => {
+      resetDiceTray();
+      $('tray-placeholder').hidden = false;
+      $('dice-stage').dataset.mode = 'fallback';
+      $('tray-placeholder').querySelector('span').textContent = 'Your result is still here.';
+      $('tray-status').textContent = '3D unavailable on this device · use the numbers below.';
+      $('replay-roll').disabled = true;
+    });
+    $('tray-placeholder').hidden = true;
+    await diceTray.show(roll, { animate: shouldAnimate, onComplete: () => {
+      if (generation !== trayGeneration || current?.me.id !== accountId) return;
+      $('tray-status').textContent = reducedMotion.matches ? 'Reduced motion · dice placed instantly.' : 'Settled · the same result as your roll.';
+      $('replay-roll').disabled = reducedMotion.matches;
+    } });
+  } catch {
+    if (generation !== trayGeneration || current?.me.id !== accountId) return;
+    trayModule = null;
+    resetDiceTray();
+    $('tray-placeholder').hidden = false;
+    $('dice-stage').dataset.mode = 'fallback';
+    $('tray-placeholder').querySelector('span').textContent = 'Your result is still here.';
+    $('tray-status').textContent = '3D unavailable on this device · use the numbers below.';
+  }
+}
+$('enable-3d').addEventListener('change', () => {
+  if (!$('enable-3d').checked) resetDiceTray();
+  try { localStorage.setItem('tavern:3d-dice', $('enable-3d').checked ? 'on' : 'off'); } catch { /* preference is optional */ }
+  updateDiceStage(current?.rolls.at(-1));
+});
+$('replay-roll').addEventListener('click', () => updateDiceStage(current?.rolls.at(-1), true));
+reducedMotion.addEventListener('change', () => updateDiceStage(current?.rolls.at(-1)));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopDiceAnimation();
+  else updateDiceStage(current?.rolls.at(-1));
+});
 
 function node(tag, className, text) {
   const el = document.createElement(tag);
@@ -229,6 +294,8 @@ function enterWorkspace(state) {
 }
 
 function leaveWorkspace() {
+  heroes.reset();
+  resetDiceTray();
   events?.close();
   events = null;
   closeDice();
@@ -267,14 +334,15 @@ function appendRoll(roll, announce = false) {
   current.rolls.push(roll);
   if (current.rolls.length > 100) current.rolls.shift();
   renderRolls();
-  showLatestRoll(roll);
+  showLatestRoll(roll, true);
   if (announce) {
     $('announcement').textContent = `${roll.author} rolled ${roll.expression}: ${roll.results.join(', ')}. Total ${roll.total}. ${labels[roll.visibility]}.`;
     if ($('dice-window').hidden) toast(`${roll.author} rolled ${roll.expression}: ${roll.total} · ${labels[roll.visibility]}`);
   }
 }
 
-function showLatestRoll(roll) {
+function showLatestRoll(roll, animate = false) {
+  updateDiceStage(roll, animate);
   if (!roll) return;
   const latest = $('latest-roll');
   const dice = node('div', 'result-dice');
@@ -326,6 +394,7 @@ $('roll-form').addEventListener('submit', async event => {
     const { roll } = await api('/api/rolls', { expression: $('expression').value, label: $('roll-label').value, visibility: document.querySelector('input[name=visibility]:checked').value });
     if (!current || current.me.id !== accountId) return;
     appendRoll(roll, true);
+    if ($('enable-3d').checked && !$('dice-window').hidden) $('dice-tray-panel').scrollIntoView({ block: 'nearest', behavior: reducedMotion.matches ? 'auto' : 'smooth' });
   } catch (error) { showError('roll-error', error.message); }
   finally { $('roll-button').disabled = false; }
 });
@@ -363,12 +432,15 @@ function openDice() {
     }
   }
   win.hidden = false;
+  win.style.zIndex = '31'; $('hero-window').style.zIndex = '30';
   $('restore-dice').hidden = false;
   $('window-state').textContent = 'Open';
   clampWindow();
+  updateDiceStage(current.rolls.at(-1));
   $('expression').focus({ preventScroll: true });
 }
 function closeDice() {
+  stopDiceAnimation();
   savePosition();
   $('dice-window').hidden = true;
   $('restore-dice').hidden = true;
@@ -378,6 +450,7 @@ $('open-dice').addEventListener('click', openDice);
 $('restore-dice').addEventListener('click', openDice);
 $('close-dice').addEventListener('click', closeDice);
 $('minimize-dice').addEventListener('click', () => {
+  stopDiceAnimation();
   savePosition();
   $('dice-window').hidden = true;
   $('window-state').textContent = 'Minimized';

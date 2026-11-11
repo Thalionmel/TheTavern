@@ -61,7 +61,7 @@
         <div class="section-label"><h2>Your campaign tools</h2><span>OPEN A WINDOW</span></div>
         <div class="launcher-grid">
           <button class="launcher launcher-active" id="open-dice" type="button"><span class="launcher-status">READY TO ROLL</span><svg><use href="#i-dice"/></svg><strong>Dice</strong><span>Make your own luck.</span><span class="launcher-bottom">Public & private rolls <svg><use href="#i-arrow"/></svg></span></button>
-          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-shield"/></svg><strong>Hero Document</strong><span>Your story, in the making.</span><span class="launcher-bottom">Character sheet & equipment</span></button>
+          <button id="open-hero" class="launcher"><span class="launcher-status">READY FOR ADVENTURE</span><svg><use href="#i-shield"/></svg><strong>Hero Document</strong><span>Your story, in the making.</span><span class="launcher-bottom">Character sheet & equipment</span></button>
           <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-people"/></svg><strong>NPC Library</strong><span>Every face has a story.</span><span class="launcher-bottom">People & connections</span></button>
           <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-feather"/></svg><strong>Personal Notebook</strong><span>Some thoughts are just yours.</span><span class="launcher-bottom">Private notes</span></button>
           <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-book"/></svg><strong>Shared Diary</strong><span>Remember the journey.</span><span class="launcher-bottom">Events & milestones</span></button>
@@ -71,12 +71,19 @@
       </section>
       <aside class="party-panel" aria-labelledby="party-heading"><div class="party-title"><h2 id="party-heading">At the table</h2><span id="member-count">0 / 6</span></div><p>Your party, together in one place.</p><ul id="members" class="members"></ul><div class="invite-box"><span class="small-caps">INVITE YOUR PARTY</span><p>Share this code with your adventurers.</p><code id="invite-code"></code><button id="copy-invite" class="secondary full-width" type="button">Copy invitation link</button><p class="tiny">The code lets people create an account at this table. Keep it within your group.</p></div><div class="own-account"><span id="my-avatar" class="avatar"></span><div><strong id="my-name"></strong><span id="my-role"></span></div><svg><use href="#i-lock"/></svg></div></aside>
     </main>
-    <footer class="window-bar"><div class="small-caps">YOUR WORKSPACE</div><button id="restore-dice" type="button" hidden><svg><use href="#i-dice"/></svg> Dice <span id="window-state">Open</span></button><span class="window-bar-tip">Your windows. Your arrangement.</span></footer>
+    <footer class="window-bar"><div class="small-caps">YOUR WORKSPACE</div><button id="restore-dice" type="button" hidden><svg><use href="#i-dice"/></svg> Dice <span id="window-state">Open</span></button><button id="restore-hero" type="button" hidden>Hero Document</button><span class="window-bar-tip">Your windows. Your arrangement.</span></footer>
   </div>
 
   <section id="dice-window" class="floating-window" role="dialog" aria-modal="false" aria-labelledby="dice-title" hidden>
     <header id="dice-drag" class="window-titlebar"><span class="drag-grip" aria-hidden="true">⠿</span><svg><use href="#i-dice"/></svg><h2 id="dice-title">A little chance</h2><div class="window-controls"><button type="button" id="minimize-dice" aria-label="Minimize dice window">−</button><button type="button" id="maximize-dice" aria-label="Maximize dice window">□</button><button type="button" id="close-dice" aria-label="Close dice window">×</button></div></header>
-    <div class="dice-content"><form id="roll-form">
+    <div class="dice-content">
+    <section id="dice-tray-panel" class="dice-tray-panel" aria-label="Dice tray">
+      <div class="tray-toolbar"><span class="small-caps">ON THE TABLE</span><label class="dice-3d-switch"><input id="enable-3d" type="checkbox" checked>3D dice</label></div>
+      <div id="dice-stage" class="dice-stage"><div id="dice-canvas" class="dice-canvas"></div><div id="tray-placeholder" class="tray-placeholder"><svg><use href="#i-dice"/></svg><span>Your next roll lands here.</span></div><span class="tray-corner" aria-hidden="true">✦</span></div>
+      <div class="tray-caption"><span id="tray-status" role="status">A little momentum. A little luck.</span><button id="replay-roll" type="button" disabled title="Replay the animation without making a new roll">↻ Replay</button></div>
+      <div id="latest-roll" class="latest-roll" hidden></div>
+    </section>
+    <form id="roll-form">
       <div class="section-label"><h3>Make a roll</h3><span>LET THE DICE DECIDE</span></div>
       <label>Dice expression<input id="expression" name="expression" value="1d20" maxlength="40" required spellcheck="false" autocomplete="off" aria-describedby="expression-help"></label><p id="expression-help" class="input-help">Keep every die: 3d20 shows three individual results.</p>
       <div class="quick-dice" role="group" aria-label="Choose dice"><button type="button" data-dice="1d6">d6</button><button type="button" data-dice="1d20" aria-pressed="true">d20</button><button type="button" data-dice="3d20">3d20</button><button type="button" data-dice="2d6+4">2d6+4</button></div>
@@ -84,8 +91,20 @@
       <fieldset class="visibility"><legend>Who sees the result?</legend><div class="visibility-options"><label><input type="radio" name="visibility" value="public" checked><span>Public</span></label><label><input type="radio" name="visibility" value="private"><span>Only me</span></label><label><input type="radio" name="visibility" value="gm"><span>To GM</span></label></div><p id="visibility-help">Everyone at your table can see this roll.</p></fieldset>
       <p id="roll-error" class="form-error" role="alert" hidden></p><button id="roll-button" class="primary full-width" type="submit"><svg><use href="#i-dice"/></svg>Roll the dice</button>
     </form>
-    <div id="latest-roll" class="latest-roll" hidden></div>
     <section class="roll-history" aria-labelledby="history-heading"><div class="section-label"><h3 id="history-heading">The story of your rolls</h3><select id="history-filter" aria-label="Filter roll history"><option value="all">All visible rolls</option><option value="public">Public rolls</option><option value="private">Only me</option><option value="gm">To GM</option></select></div><p id="history-empty" class="history-empty">A quiet table, for now.<br><span>Roll a die to start the story.</span></p><ol id="roll-history"></ol><p class="history-note">Your latest 100 visible rolls. Private rolls never go to other players.</p></section></div>
+  </section>
+  <section id="hero-window" class="floating-window hero-window" role="dialog" aria-modal="false" aria-labelledby="hero-title" hidden>
+    <header id="hero-drag" class="window-titlebar"><span class="drag-grip" aria-hidden="true">⠿</span><svg><use href="#i-shield"/></svg><h2 id="hero-title">Your hero’s story</h2><div class="window-controls"><button type="button" id="maximize-hero" aria-label="Maximize hero window">□</button><button type="button" id="close-hero" aria-label="Close hero window">×</button></div></header>
+    <nav class="hero-tabs" aria-label="Character tools"><button type="button" data-hero-tab="sheets" aria-pressed="true">Character sheets</button><button type="button" data-hero-tab="generator" aria-pressed="false">Heldenbau · Create & edit</button></nav>
+    <div id="hero-sheets-panel" class="hero-content">
+      <div class="hero-picker"><label>Available sheets<select id="hero-list"></select></label><button id="hero-refresh" class="secondary" type="button">Refresh</button></div>
+      <p id="hero-description"></p><a id="hero-download" class="secondary hero-download" hidden>Download file</a><div id="hero-preview" class="hero-preview"></div>
+      <form id="hero-upload" class="hero-upload"><h3>Keep your sheet at this table</h3><p>In Heldenbau, choose “Als Datei” for a complete hero file, or “Drucken / PDF” for a printable sheet. You can also use another PDF character sheet.</p><label>Character file<input id="hero-file" type="file" accept=".pdf,.json,application/pdf,application/json" required></label><span class="input-help">One attached sheet per account. PDF: 10 MiB · Heldenbau JSON: 2 MiB.</span>
+      <label>Who can see this sheet?<select id="hero-visibility"><option value="private">Only me · even the GM cannot see it</option><option value="gm">To GM · you and the game master</option><option value="public">Public · everyone at this table</option></select></label>
+      <label id="hero-replacement" class="hero-replacement" hidden><input id="hero-replace" type="checkbox">Replace my current attachment. I have kept a copy of it.</label><button id="hero-upload-button" class="primary" type="submit">Attach my sheet</button></form>
+    </div>
+    <div id="hero-generator-panel" class="hero-generator-panel" hidden><p>Create, edit and save your heroes in RPG Projects. Its account login is separate. Save your work there before signing out of The Tavern. <a href="https://rpg-projects.vercel.app/projects/character-builder" target="_blank" rel="noopener noreferrer">Open Heldenbau in a new tab ↗</a></p><iframe id="hero-generator" title="Heldenbau character generator" referrerpolicy="no-referrer" allow="clipboard-write"></iframe><p>To attach a saved hero here: export it with “Als Datei”, then upload it under Character sheets. Changes in Heldenbau do not automatically update your attachment.</p></div>
+    <p id="hero-error" class="form-error" role="alert" hidden></p>
   </section>
   <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
   <div id="toast" class="toast" role="status" hidden></div>
