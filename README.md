@@ -2,6 +2,8 @@
 
 A shared tabletop campaign hub for one game master and five players. The first working slice is **accounts, campaign rooms, and live dice rolls with server-enforced visibility**.
 
+Cloudflare deployment: **[Open The Tavern](https://the-tavern.the-tavern.workers.dev)**. Create a room to become its GM, then share its invitation with the other five players. Each person chooses their own name and password.
+
 ## Run locally
 
 Requires **Node.js 22.14 or newer**. Cloudflare is the chosen hosting target. Its runtime can be tested locally without an account:
@@ -71,4 +73,4 @@ The selected path is **Cloudflare Workers with static assets and SQLite-backed D
 
 The Cloudflare Free plan is the initial target, subject to its usage limits. A supplied `workers.dev` HTTPS address avoids buying a domain. R2 or AWS S3 can be added later for maps and documents; neither is required or configured for dice.
 
-The standalone fallback still needs one Node process and persistent disk with HTTPS for internet access. GitHub Pages cannot run either backend. No cloud resources, subscriptions, public deployments, or Discord integrations have been created.
+The standalone fallback still needs one Node process and persistent disk with HTTPS for internet access. GitHub Pages cannot run either backend. The Worker and its two SQLite-backed Durable Object namespaces are deployed in the account pinned by `wrangler.jsonc`. No paid subscription, custom domain, AWS resources or Discord integration was added. GitHub Actions validates changes; publishing updates remains a separate Wrangler command.

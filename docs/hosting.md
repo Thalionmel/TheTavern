@@ -1,6 +1,6 @@
 # Hosting The Tavern on Cloudflare
 
-Cloudflare is the selected host. Checked against official documentation on **11 November 2026**. No account, subscription or public deployment has been created. Local tests do not establish production latency or actual billable usage.
+Cloudflare is the selected host. Checked against official documentation on **11 November 2026**. The account is connected and the first Worker deployment is at **[the-tavern.the-tavern.workers.dev](https://the-tavern.the-tavern.workers.dev)**. No paid subscription or AWS resources were added. Actual billing/usage must be monitored in the account dashboard.
 
 ## What runs where
 
@@ -47,23 +47,23 @@ Open <http://127.0.0.1:8787>. Create a room, then use another browser profile/pr
 
 Wrangler stores local state in `.wrangler/`. The original Node preview on port 3000 and its `data/tavern.sqlite` remain independent. Deployment does not copy either local dataset online. Do not delete these directories if their campaign data matters.
 
-## First online deployment
+## Authentication and online deployment
 
-The account owner first creates a [Cloudflare account](https://dash.cloudflare.com/sign-up), verifies their email and selects Workers Free. No custom domain is required. After the intended account is confirmed, authenticate from this repository:
+The account owner has created the Cloudflare account and authorized Wrangler. The confirmed account ID is pinned in `wrangler.jsonc`, and the free account subdomain is `the-tavern.workers.dev`. No custom domain is required. To connect another development machine to this same account:
 
 ```sh
-npx wrangler login
+npx wrangler login --scopes account:read user:read workers_scripts:write
 npx wrangler whoami
 ```
 
-Confirm the account shown by `whoami` is the intended personal account. If more than one account is available, set the confirmed `account_id` in `wrangler.jsonc` before deployment. Then:
+Confirm the account shown by `whoami` matches the configured account. These scopes cover account identification and this Worker's script, Durable Object and subdomain deployment; add other scopes only when a later feature needs them. The Cloudflare MCP connection is a separate login and does not authenticate Wrangler. To validate and publish an update:
 
 ```sh
 npm test
 npm run deploy:cloudflare
 ```
 
-The deployment creates the Worker and its Durable Object namespaces and returns its HTTPS URL. If Cloudflare asks for a Workers subdomain, choose it in that account. There are no application secrets or database IDs to provision for this first slice.
+The first deployment created the Worker and its Durable Object namespaces. Subsequent deployments update that Worker while keeping its stored data. There are no application secrets or database IDs to provision for this first slice. For a different target account, first confirm that target and deliberately change the account binding rather than relying on an implicit login selection.
 
 On the real URL, create test GM/player accounts in separate browser profiles and repeat the three visibility checks, reload, sign out and sign back in. Check dashboard usage and authentication behavior before moving the group's campaign there. Published data persists across normal Worker updates; changes to existing migrations or namespace bindings need a deliberate data migration. Application-level export and restore are not implemented yet, so use test data until the backup/recovery workflow is agreed.
 
