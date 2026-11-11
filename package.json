@@ -1,0 +1,13 @@
+{
+  "name": "the-tavern",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A private tabletop campaign room with live, permission-aware dice rolls.",
+  "engines": { "node": ">=22.14.0" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "dev": "node --env-file-if-exists=.env --watch server.mjs",
+    "test": "node --test"
+  }
+}

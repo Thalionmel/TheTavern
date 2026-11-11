@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153d34">
+  <title>The Tavern · A table of your own</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-dice" viewBox="0 0 32 32"><path d="M16 2 29 11 25 27H7L3 11Z M16 2 7 27 29 11H3l22 16Z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 32 32"><path d="M16 7C12 3 5 4 3 5v22c4-2 9-2 13 1 4-3 9-3 13-1V5c-4-2-9-1-13 2Zm0 0v21M7 10h5M7 15h5m8-5h5m-5 5h5"/></symbol>
+    <symbol id="i-people" viewBox="0 0 32 32"><circle cx="16" cy="9" r="5"/><path d="M6 28v-4a10 10 0 0 1 20 0v4M5 5a4 4 0 0 0 0 8M2 24v-4a7 7 0 0 1 6-7m19-8a4 4 0 0 1 0 8m3 11v-4a7 7 0 0 0-6-7"/></symbol>
+    <symbol id="i-feather" viewBox="0 0 32 32"><path d="M4 29 23 10M10 23C5 7 21 2 29 3c0 11-7 24-19 20Zm7-7h8m-13 4v-8"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 32 32"><path d="M16 3c5 4 9 4 12 4v9c0 7-7 12-12 14C11 28 4 23 4 16V7c3 0 7 0 12-4Z M16 10v12m-6-6h12"/></symbol>
+    <symbol id="i-map" viewBox="0 0 32 32"><path d="m2 7 9-4 10 4 9-4v23l-9 4-10-4-9 4Zm9-4v23M21 7v23"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 32 32"><path d="M28 15c0 7-7 11-13 11l-10 4 2-8C-2 12 5 3 16 3c7 0 12 5 12 12Z M9 14h1m5 0h1m5 0h1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 32 32"><rect x="6" y="14" width="20" height="16" rx="3"/><path d="M10 14V8a6 6 0 0 1 12 0v6m-6 7v4"/></symbol>
+    <symbol id="i-crown" viewBox="0 0 32 32"><path d="M4 10 9 16l7-11 7 11 5-6-3 16H7ZM8 30h16"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 32 32"><path d="M5 16h22m-9-9 9 9-9 9"/></symbol>
+  </svg>
+
+  <div id="entrance">
+    <header class="entrance-header"><a class="brand" href="/"><svg><use href="#i-dice"/></svg><span>The Tavern</span></a><span class="small-caps edition">YOUR CAMPAIGN. YOUR TABLE.</span></header>
+    <main class="entrance-layout">
+      <section class="welcome">
+        <div class="eyebrow"><span></span> A PLACE TO GATHER</div>
+        <h1>Every adventure<br> starts at <em>a table.</em></h1>
+        <p class="welcome-copy">A shared space for your party, your stories, and that one roll that changes everything.</p>
+        <div class="table-illustration" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><svg class="hero-die"><use href="#i-dice"/></svg><span class="orbit-star star-one">✦</span><span class="orbit-star star-two">✧</span><span class="die-number">20</span><span class="table-caption">SIX SEATS. ENDLESS POSSIBILITIES.</span></div>
+        <div class="welcome-foot"><svg><use href="#i-people"/></svg><span>One game master. Five adventurers.<br><strong>A little luck goes a long way.</strong></span></div>
+      </section>
+      <section class="entrance-card" aria-labelledby="entrance-title">
+        <span class="card-flourish" aria-hidden="true">✦</span><div class="eyebrow">THE DOOR IS OPEN</div>
+        <h2 id="entrance-title">Pull up a chair.</h2><p id="entrance-description">Start a campaign and invite your party.</p>
+        <div class="auth-tabs" role="group" aria-label="Choose how to enter"><button type="button" data-mode="create" aria-pressed="true">Create a room</button><button type="button" data-mode="join" aria-pressed="false">Join a room</button><button type="button" data-mode="login" aria-pressed="false">Sign in</button></div>
+        <form id="account-form">
+          <label id="campaign-label">Campaign name<input id="room-name" name="roomName" minlength="2" maxlength="64" placeholder="The Grey Road" required autocomplete="off"></label>
+          <label id="code-label" hidden>Invitation code<input id="room-code" name="roomCode" maxlength="16" placeholder="Your GM’s invitation code" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
+          <label>Your name<input id="username" name="username" minlength="2" maxlength="32" placeholder="What should we call you?" required autocomplete="username"></label>
+          <label>Password<input id="password" name="password" type="password" minlength="10" maxlength="128" placeholder="At least 10 characters" required autocomplete="new-password"></label>
+          <p id="account-error" class="form-error" role="alert" hidden></p>
+          <button id="enter-button" class="primary full-width" type="submit">Create your table <span aria-hidden="true">↗</span></button>
+          <p id="account-hint" class="form-hint">You’ll be the game master. Your friends join with an invitation code and create their own accounts.</p>
+        </form>
+        <div class="entrance-card-footer"><svg><use href="#i-lock"/></svg><span>A private table. No public room directory.</span></div>
+      </section>
+    </main>
+    <footer class="entrance-footer"><span>THE TAVERN</span><span>Good company. Uncertain outcomes.</span><span>FIRST CHAPTER · LIVE DICE</span></footer>
+  </div>
+
+  <div id="workspace" hidden>
+    <header class="app-header"><a class="brand" href="/"><svg><use href="#i-dice"/></svg><span>The Tavern</span></a><div class="header-divider"></div><span id="campaign-name"></span><div class="header-actions"><span id="connection" class="connection"><span></span>Connecting</span><button id="sign-out" class="header-button" type="button">Sign out</button></div></header>
+    <main class="hub-layout">
+      <section class="hub-main">
+        <div class="breadcrumb small-caps">YOUR CAMPAIGN <span>/</span> THE HUB</div>
+        <div class="hub-heading"><div><div class="eyebrow">MAKE YOURSELF AT HOME</div><h1>A table of <em>your own.</em></h1><p>Open what you need. Let the adventure unfold.</p></div><span class="chapter-mark" aria-hidden="true">I</span></div>
+        <div class="section-label"><h2>Your campaign tools</h2><span>OPEN A WINDOW</span></div>
+        <div class="launcher-grid">
+          <button class="launcher launcher-active" id="open-dice" type="button"><span class="launcher-status">READY TO ROLL</span><svg><use href="#i-dice"/></svg><strong>Dice</strong><span>Make your own luck.</span><span class="launcher-bottom">Public & private rolls <svg><use href="#i-arrow"/></svg></span></button>
+          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-shield"/></svg><strong>Hero Document</strong><span>Your story, in the making.</span><span class="launcher-bottom">Character sheet & equipment</span></button>
+          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-people"/></svg><strong>NPC Library</strong><span>Every face has a story.</span><span class="launcher-bottom">People & connections</span></button>
+          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-feather"/></svg><strong>Personal Notebook</strong><span>Some thoughts are just yours.</span><span class="launcher-bottom">Private notes</span></button>
+          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-book"/></svg><strong>Shared Diary</strong><span>Remember the journey.</span><span class="launcher-bottom">Events & milestones</span></button>
+          <button class="launcher" disabled><span class="launcher-status">COMING LATER</span><svg><use href="#i-map"/></svg><strong>Map Room</strong><span>There’s more beyond the fog.</span><span class="launcher-bottom">Maps & character tokens</span></button>
+        </div>
+        <div class="future-tools"><span>Also on the horizon</span><span>Rules library</span><span>Chat rooms</span></div>
+      </section>
+      <aside class="party-panel" aria-labelledby="party-heading"><div class="party-title"><h2 id="party-heading">At the table</h2><span id="member-count">0 / 6</span></div><p>Your party, together in one place.</p><ul id="members" class="members"></ul><div class="invite-box"><span class="small-caps">INVITE YOUR PARTY</span><p>Share this code with your adventurers.</p><code id="invite-code"></code><button id="copy-invite" class="secondary full-width" type="button">Copy invitation link</button><p class="tiny">The code lets people create an account at this table. Keep it within your group.</p></div><div class="own-account"><span id="my-avatar" class="avatar"></span><div><strong id="my-name"></strong><span id="my-role"></span></div><svg><use href="#i-lock"/></svg></div></aside>
+    </main>
+    <footer class="window-bar"><div class="small-caps">YOUR WORKSPACE</div><button id="restore-dice" type="button" hidden><svg><use href="#i-dice"/></svg> Dice <span id="window-state">Open</span></button><span class="window-bar-tip">Your windows. Your arrangement.</span></footer>
+  </div>
+
+  <section id="dice-window" class="floating-window" role="dialog" aria-modal="false" aria-labelledby="dice-title" hidden>
+    <header id="dice-drag" class="window-titlebar"><span class="drag-grip" aria-hidden="true">⠿</span><svg><use href="#i-dice"/></svg><h2 id="dice-title">A little chance</h2><div class="window-controls"><button type="button" id="minimize-dice" aria-label="Minimize dice window">−</button><button type="button" id="maximize-dice" aria-label="Maximize dice window">□</button><button type="button" id="close-dice" aria-label="Close dice window">×</button></div></header>
+    <div class="dice-content"><form id="roll-form">
+      <div class="section-label"><h3>Make a roll</h3><span>LET THE DICE DECIDE</span></div>
+      <label>Dice expression<input id="expression" name="expression" value="1d20" maxlength="40" required spellcheck="false" autocomplete="off" aria-describedby="expression-help"></label><p id="expression-help" class="input-help">Keep every die: 3d20 shows three individual results.</p>
+      <div class="quick-dice" role="group" aria-label="Choose dice"><button type="button" data-dice="1d6">d6</button><button type="button" data-dice="1d20" aria-pressed="true">d20</button><button type="button" data-dice="3d20">3d20</button><button type="button" data-dice="2d6+4">2d6+4</button></div>
+      <label>What’s the roll for? <span class="optional">optional</span><input id="roll-label" name="label" maxlength="80" placeholder="A leap of faith…" autocomplete="off"></label>
+      <fieldset class="visibility"><legend>Who sees the result?</legend><div class="visibility-options"><label><input type="radio" name="visibility" value="public" checked><span>Public</span></label><label><input type="radio" name="visibility" value="private"><span>Only me</span></label><label><input type="radio" name="visibility" value="gm"><span>To GM</span></label></div><p id="visibility-help">Everyone at your table can see this roll.</p></fieldset>
+      <p id="roll-error" class="form-error" role="alert" hidden></p><button id="roll-button" class="primary full-width" type="submit"><svg><use href="#i-dice"/></svg>Roll the dice</button>
+    </form>
+    <div id="latest-roll" class="latest-roll" hidden></div>
+    <section class="roll-history" aria-labelledby="history-heading"><div class="section-label"><h3 id="history-heading">The story of your rolls</h3><select id="history-filter" aria-label="Filter roll history"><option value="all">All visible rolls</option><option value="public">Public rolls</option><option value="private">Only me</option><option value="gm">To GM</option></select></div><p id="history-empty" class="history-empty">A quiet table, for now.<br><span>Roll a die to start the story.</span></p><ol id="roll-history"></ol><p class="history-note">Your latest 100 visible rolls. Private rolls never go to other players.</p></section></div>
+  </section>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
