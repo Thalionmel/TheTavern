@@ -4,3 +4,6 @@ data/
 work/
 outputs/
 *.log
+.wrangler/
+.dev.vars
+.dev.vars.*

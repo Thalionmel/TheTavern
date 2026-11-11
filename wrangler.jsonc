@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "the-tavern",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/healthz"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "CAMPAIGNS", "class_name": "CampaignRoom" },
+      { "name": "REQUEST_GUARDS", "class_name": "RequestGuard" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CampaignRoom", "RequestGuard"] }
+  ],
+  "observability": { "enabled": false }
+}

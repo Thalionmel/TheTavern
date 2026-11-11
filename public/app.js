@@ -110,6 +110,10 @@ function setConnection(connected) {
 function connect() {
   events?.close();
   const accountId = current?.me.id;
+  if (current?.transport === 'websocket') {
+    events = connectWebSocket(accountId);
+    return;
+  }
   events = new EventSource('/api/events');
   events.addEventListener('snapshot', event => {
     if (!current || current.me.id !== accountId) return;
@@ -141,6 +145,65 @@ function connect() {
     // EventSource reconnects automatically; this also detects revoked sessions.
     try { await api('/api/state'); } catch { /* api handles an expired login */ }
   };
+}
+
+function receivePacket(accountId, type, data) {
+  if (!current || current.me.id !== accountId) return;
+  if (type === 'snapshot') {
+    if (data.me.id !== accountId) return;
+    current = data;
+    setConnection(true);
+    renderMembers();
+    renderRolls();
+    showLatestRoll(current.rolls.at(-1));
+  } else if (type === 'roll') appendRoll(data, true);
+  else if (type === 'presence') {
+    current.members.forEach(member => { member.online = data.online.includes(member.id); });
+    renderMembers();
+  } else if (type === 'members') {
+    current.members = data.members;
+    renderMembers();
+  } else if (type === 'expired') {
+    leaveWorkspace();
+    toast('Your session has ended. Please sign in again.');
+  }
+}
+
+function connectWebSocket(accountId) {
+  let socket;
+  let reconnectTimer;
+  let stopped = false;
+  let retries = 0;
+  let keepalive;
+  const open = () => {
+    if (stopped || current?.me.id !== accountId) return;
+    const url = new URL('/api/events', location.origin);
+    url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(url);
+    socket.onopen = () => {
+      retries = 0;
+      // Cloudflare answers this without waking the campaign object.
+      keepalive = setInterval(() => { if (socket.readyState === WebSocket.OPEN) socket.send('ping'); }, 45_000);
+    };
+    socket.onmessage = event => {
+      if (stopped || event.data === 'pong') return;
+      try {
+        const packet = JSON.parse(event.data);
+        receivePacket(accountId, packet.type, packet.data);
+      } catch { /* ignore malformed transport messages */ }
+    };
+    socket.onclose = async () => {
+      clearInterval(keepalive);
+      if (stopped || current?.me.id !== accountId) return;
+      setConnection(false);
+      try { await api('/api/state'); } catch { /* api clears a revoked login */ }
+      if (stopped || current?.me.id !== accountId) return;
+      reconnectTimer = setTimeout(open, Math.min(1000 * 2 ** retries++, 15_000));
+    };
+    socket.onerror = () => { if (!stopped && current?.me.id === accountId) setConnection(false); };
+  };
+  open();
+  return { close() { stopped = true; clearTimeout(reconnectTimer); clearInterval(keepalive); socket?.close(); } };
 }
 
 function enterWorkspace(state) {

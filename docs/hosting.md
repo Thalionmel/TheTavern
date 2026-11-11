@@ -1,21 +1,80 @@
-# Hosting the first six-person table
+# Hosting The Tavern on Cloudflare
 
-Checked against the linked official sources on **11 November 2026**. Prices are the providers' listed USD prices, before any applicable tax. No service has been purchased or deployed.
+Cloudflare is the selected host. Checked against official documentation on **11 November 2026**. No account, subscription or public deployment has been created. Local tests do not establish production latency or actual billable usage.
 
-The current app needs one long-running Node process, a small persistent disk for SQLite, and HTTPS or a trusted encrypted private network. There is no separate paid database or real-time messaging service to subscribe to.
+## What runs where
 
-| Approach | Cost | Fit for this version |
+| Part | Cloudflare service | Current behavior |
 | --- | --- | --- |
-| Local preview | No hosting subscription | Only reachable on the host computer by default. Useful for development and testing with different browser profiles. |
-| Existing computer + Tailscale Personal | $0 for up to six personal users, plus your existing power/internet costs | Fits this group exactly. Everyone connects their device to the private network; the host computer must stay on. Configure an appropriate listening address and encrypted/private access before using real accounts. |
-| Railway Hobby + persistent volume | $5 monthly minimum, including $5 of usage; usage beyond that costs extra | Convenient managed hosting. Attach persistent storage and point `DATABASE_PATH` into that volume. Confirm projected resource/volume usage in the dashboard before choosing a budget. |
-| Render paid compute + persistent disk | Smallest paid compute is listed at $7/month; disk is $0.25/GB/month | Straightforward for this architecture. A 1 GB disk gives a starting listed base of $7.25/month, excluding additional usage/tax. |
-| Render Free | $0 compute tier, with restrictions | Unsuitable for the current local SQLite design: the filesystem is ephemeral and free instances cannot attach a persistent disk. Data is lost on restart/redeploy/spin-down. |
+| Hub interface | Worker static assets | Serves HTML, CSS and JavaScript. Only `/api/*` and `/healthz` run the Worker first. |
+| HTTP entry point | Worker | Validates requests and routes each campaign to its own Durable Object. |
+| Accounts and dice history | SQLite-backed Durable Object per campaign | Generates results, persists accounts/sessions/rolls and filters history by audience. |
+| Live results and presence | Hibernating WebSockets in the campaign object | Filters messages by stored session and audience; connections remain open while the object sleeps. |
+| Authentication rate limits | SQLite-backed Durable Object per IP | Keeps limits across runtime eviction without continuous timers. |
+| Maps and attachments | Future R2 or AWS S3 integration | No buckets, upload endpoints or storage credentials are configured. |
 
-Sources: [Tailscale pricing](https://tailscale.com/pricing), [Railway billing](https://docs.railway.com/pricing/understanding-your-bill), [Render pricing](https://render.com/pricing), [Render free-service restrictions](https://render.com/docs/free).
+`wrangler.jsonc` binds `CampaignRoom` and `RequestGuard` and creates their SQLite namespaces in migration `v1`. SQLite-backed objects support the Free plan; do not replace this with a legacy KV-backed class migration.
 
-For an occasional game night, trying the existing-computer option first avoids a hosting bill. For a room that remains reachable between sessions without keeping a personal computer running, a small managed paid service is easier to operate. A domain is optional when using a provider's supplied HTTPS address; buying a custom domain is a separate choice.
+## Initial cost target
 
-GitHub hosts the source. GitHub Pages is static hosting and cannot run the account/dice backend. A free serverless alternative could be explored later, but this Node/SQLite app is not a drop-in deployment to a Workers/edge runtime.
+For one six-person campaign, **$0 hosting is a reasonable starting estimate**, not a measured guarantee. Start on Workers Free and review actual usage after a real session.
 
-Before an internet deployment, select the host and region, configure the exact HTTPS `APP_ORIGIN`, preserve `/api/events` streaming, choose persistent storage and a backup method, and test the three roll audiences on the real URL. No external service is needed for dice generation. Keep Discord voice/video outside the app for now.
+| Service | Relevant Free allowance |
+| --- | --- |
+| Worker static assets | Free, unlimited asset requests; no additional asset storage charge. |
+| Worker requests | 100,000 requests/day, subject to CPU/runtime limits. |
+| Durable Object compute | 100,000 requests/day and 13,000 GB-s/day. Hibernating time is excluded from duration billing. |
+| SQLite Durable Object storage | 5 GB total, 5 million rows read/day and 100,000 rows written/day. Index updates also contribute to writes. |
+| Domain | The supplied `workers.dev` HTTPS address is sufficient. A custom domain is optional and priced separately. |
+
+These are account-level plan limits, not allocations exclusively for The Tavern. Free limits can stop requests until they reset; upgrading to a paid plan changes the billing model. Avoid enabling paid services merely to test this room.
+
+For scale: six people each rolling 100 times in one session create 600 rolls. Roll submission and live delivery produce requests and SQL activity; session checks, presence, history reloads and indexes add overhead. That workload appears comfortably below the listed daily allowances, but only a deployed session can confirm actual usage. Password hashing runs in the Durable Object runtime and must also be checked on the live deployment.
+
+Sources: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/), [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/), [WebSocket hibernation](https://developers.cloudflare.com/durable-objects/best-practices/websockets/).
+
+## Test locally without an account
+
+Requires Node.js 22.14 or newer:
+
+```sh
+npm ci
+npm test
+npm run dev:cloudflare
+```
+
+Open <http://127.0.0.1:8787>. Create a room, then use another browser profile/private window to join as a second account. Verify Public reaches both, Only me stays with the roller, and To GM reaches the roller and GM. Multiple tabs in one profile share a session.
+
+Wrangler stores local state in `.wrangler/`. The original Node preview on port 3000 and its `data/tavern.sqlite` remain independent. Deployment does not copy either local dataset online. Do not delete these directories if their campaign data matters.
+
+## First online deployment
+
+The account owner first creates a [Cloudflare account](https://dash.cloudflare.com/sign-up), verifies their email and selects Workers Free. No custom domain is required. After the intended account is confirmed, authenticate from this repository:
+
+```sh
+npx wrangler login
+npx wrangler whoami
+```
+
+Confirm the account shown by `whoami` is the intended personal account. If more than one account is available, set the confirmed `account_id` in `wrangler.jsonc` before deployment. Then:
+
+```sh
+npm test
+npm run deploy:cloudflare
+```
+
+The deployment creates the Worker and its Durable Object namespaces and returns its HTTPS URL. If Cloudflare asks for a Workers subdomain, choose it in that account. There are no application secrets or database IDs to provision for this first slice.
+
+On the real URL, create test GM/player accounts in separate browser profiles and repeat the three visibility checks, reload, sign out and sign back in. Check dashboard usage and authentication behavior before moving the group's campaign there. Published data persists across normal Worker updates; changes to existing migrations or namespace bindings need a deliberate data migration. Application-level export and restore are not implemented yet, so use test data until the backup/recovery workflow is agreed.
+
+GitHub Actions runs validation only. It does not deploy and has no Cloudflare credentials. Automatic deployment can be connected later after the account and first deployment are verified.
+
+## Later storage and voice
+
+Structured character sheets, notes, NPC records and map reveal state can live with the campaign's database when those features are implemented. Larger map images and documents belong in object storage. R2 is a convenient first option and offers an S3-compatible API; AWS S3 remains possible if there is a concrete reason to use it.
+
+R2 Standard currently includes 10 GB-month storage, 1 million Class A operations and 10 million Class B operations monthly, with no internet egress charge. Enabling R2 and any billing requirements should be a separate decision when uploads are implemented. AWS S3 has its own storage, request and transfer costs; no AWS account access is needed now. GM-only assets must use authorized retrieval, rather than public bucket URLs, to preserve future map secrecy.
+
+Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
+
+Keep Discord for voice/video initially. The app currently has neither embedded Discord calls nor its own voice/video service. Railway remains a fallback for the standalone Node backend if the project later needs an always-running process; that option needs a persistent volume and a separate hosting budget.
